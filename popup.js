@@ -81,33 +81,71 @@ $('raw').onchange = e => {
   setMode(e.target.checked)
 }
 
-$('key').onchange = load
+$('key').onchange = () => {
+  localStorage.setItem(`key:${host}`, $('key').value)
+  load()
+}
 $('q').oninput = render
 
-$('save').onclick = () => {
-  let v = $('raw').checked || !obj ? $('text').value : JSON.stringify(obj)
-  try { v = JSON.stringify(JSON.parse(v)) } catch {}
+const msg = text => { $('msg').textContent = text }
+
+// write keys in the page's main world, then reload
+function write(entries) {
   chrome.scripting.executeScript({
     target: { tabId },
     world: 'MAIN',
-    args: [$('key').value, v],
-    func: (k, v) => {
+    args: [entries],
+    func: entries => {
       const orig = Storage.prototype.setItem
       Storage.prototype.setItem = () => {} // กันเกมเขียน state เก่าทับตอน reload
-      orig.call(localStorage, k, v)
+      for (const [k, v] of Object.entries(entries)) orig.call(localStorage, k, v)
       location.reload()
     }
   })
   window.close()
 }
 
+$('save').onclick = () => {
+  let v = $('raw').checked || !obj ? $('text').value : JSON.stringify(obj)
+  try { v = JSON.stringify(JSON.parse(v)) } catch {}
+  write({ [$('key').value]: v })
+}
+
+$('export').onclick = () => {
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+  const a = h('a', {
+    href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })),
+    download: `${host}-localStorage-${stamp}.json`
+  })
+  a.click()
+  msg(`Exported ${Object.keys(data).length} keys`)
+}
+
+$('import').onclick = () => $('file').click()
+
+$('file').onchange = async e => {
+  try {
+    const entries = JSON.parse(await e.target.files[0].text())
+    const ok = entries && typeof entries === 'object' && !Array.isArray(entries) && Object.values(entries).every(v => typeof v === 'string')
+    if (!ok) throw new Error('not a localStorage export')
+    write(entries)
+  } catch (err) {
+    msg(`Import failed: ${err.message}`)
+  }
+}
+
+let host
 ;(async () => {
-  [{ id: tabId }] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  tabId = tab.id
+  host = new URL(tab.url).hostname
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => Object.fromEntries(Object.entries(localStorage))
   })
   data = result
   $('key').replaceChildren(...Object.keys(data).map(k => h('option', { textContent: k })))
+  const last = localStorage.getItem(`key:${host}`)
+  if (last in data) $('key').value = last
   load()
 })()

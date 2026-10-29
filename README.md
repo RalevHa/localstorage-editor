@@ -10,6 +10,8 @@ A small Chrome extension for editing a page's `localStorage` without hand-editin
 - **Grouped by path** — e.g. `state.attributes` and `state.stats` are separate collapsible cards.
 - **Search** — filter by key name or value; matching groups open automatically.
 - **Set all** — set every numeric field in a group to one value at once.
+- **Export / Import** — back up every key of the current site to a `.json` file and restore it later.
+- **Remembers your key** — reopens on the last key you edited, per site.
 - **Raw JSON mode** — toggle to a plain text editor for anything the form can't express.
 - **Edits stick** — apps that rewrite `localStorage` on unload (autosave) would otherwise overwrite your change. The extension blocks `Storage.setItem` for the reload, so your value survives.
 
