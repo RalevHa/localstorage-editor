@@ -27,12 +27,14 @@
   .row { display: flex; align-items: center; gap: 10px; padding: 3px 0 }
   .row span { flex: 0 0 180px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .row input[type=number], .row input[type=text] { flex: 1; min-width: 0; padding: 4px 8px }
+  .row input.name { flex: 0 0 180px; color: var(--muted) }
   .row input[type=number] { text-align: right; font-variant-numeric: tabular-nums }
   .all { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px }
+  .add { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px }
   .all span { color: var(--accent) }
   .all input { flex: 0 0 90px !important }
-  .all button { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer }
-  .all button:hover { background: var(--accent); color: var(--accent-ink) }
+  .all button, .add button { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer }
+  .all button:hover, .add button:hover { background: var(--accent); color: var(--accent-ink) }
   #text { display: block; width: calc(100% - 20px); height: 430px; margin: 10px; font: 12px/1.5 ui-monospace, Menlo, monospace; resize: none }
   footer { padding: 10px; position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line) }
   #tools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }

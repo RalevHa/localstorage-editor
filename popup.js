@@ -19,6 +19,18 @@ const leaves = (v, path = [], out = []) => {
   return out
 }
 
+// rename the last segment of p in place (keeps key order); p is shared with the row's field closure
+function rename(p, name) {
+  const parent = get(p.slice(0, -1))
+  if (!name || name in parent) return false
+  const old = p.at(-1)
+  const entries = Object.entries(parent).map(([k, v]) => [k === old ? name : k, v])
+  Object.keys(parent).forEach(k => delete parent[k])
+  Object.assign(parent, Object.fromEntries(entries))
+  p[p.length - 1] = name
+  return true
+}
+
 function field(path) {
   const v = get(path)
   if (typeof v === 'boolean') return h('input', { type: 'checkbox', checked: v, onchange: e => set(path, e.target.checked) })
@@ -27,6 +39,37 @@ function field(path) {
     oninput: e => e.target.value !== '' && set(path, Number(e.target.value))
   })
   return h('input', { type: 'text', value: v ?? '', oninput: e => set(path, v === null && e.target.value === '' ? null : e.target.value) })
+}
+
+function nameInput(p) {
+  const isArr = Array.isArray(get(p.slice(0, -1)))
+  const i = h('input', { type: 'text', className: 'name', value: p.at(-1), readOnly: isArr, title: p.join('.') })
+  i.onchange = () => {
+    if (rename(p, i.value.trim())) i.title = p.join('.')
+    else i.value = p.at(-1)
+  }
+  return i
+}
+
+// add a new key to the object at parent, typed by the select
+function addRow(parent) {
+  const k = h('input', { type: 'text', className: 'name', placeholder: 'ชื่อใหม่' })
+  const v = h('input', { type: 'text', placeholder: 'ค่า' })
+  const t = h('select', {}, ...['string', 'number', 'boolean'].map(x => h('option', { textContent: x })))
+  const add = () => {
+    const name = k.value.trim(), o = get(parent)
+    if (!name) return
+    if (name in o) return msg(`"${name}" มีอยู่แล้ว`)
+    let val = v.value
+    if (t.value === 'number') {
+      val = val.trim() === '' ? NaN : Number(val)
+      if (Number.isNaN(val)) return msg('ไม่ใช่ตัวเลข')
+    } else if (t.value === 'boolean') val = val.trim().toLowerCase() === 'true'
+    o[name] = val
+    render()
+  }
+  v.onkeydown = e => { if (e.key === 'Enter') add() }
+  return h('div', { className: 'row add' }, k, t, v, h('button', { onclick: add }, '+ Add'))
 }
 
 function render() {
@@ -50,7 +93,9 @@ function render() {
       d.append(h('div', { className: 'row all' }, h('span', {}, `ตั้งทุกตัว (${nums.length})`), n,
         h('button', { onclick: () => { if (n.value !== '') { nums.forEach(p => set(p, Number(n.value))); render() } } }, 'Set all')))
     }
-    for (const p of paths) d.append(h('div', { className: 'row' }, h('span', { title: p.join('.') }, p.at(-1)), field(p)))
+    for (const p of paths) d.append(h('div', { className: 'row' }, nameInput(p), field(p)))
+    const parent = paths[0].slice(0, -1)
+    if (!Array.isArray(get(parent))) d.append(addRow(parent))
     body.append(d)
   }
 }
