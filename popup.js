@@ -42,7 +42,7 @@ function render() {
     groups.get(g).push(path)
   }
   for (const [name, paths] of groups) {
-    const d = h('details', { open: !!q || openGroups.has(name), ontoggle: e => (e.target.open ? openGroups.add(name) : openGroups.delete(name)) },
+    const d = h('details', { open: !!q || openGroups.has(name), ontoggle: e => { if (!q) e.target.open ? openGroups.add(name) : openGroups.delete(name) } }, // ponytail: ignore toggles from search auto-open
       h('summary', {}, name, h('small', {}, ` (${paths.length})`)))
     const nums = paths.filter(p => typeof get(p) === 'number')
     if (nums.length > 1) {
@@ -89,27 +89,31 @@ $('q').oninput = render
 
 const msg = text => { $('msg').textContent = text }
 
-// write keys in the page's main world, then reload
-function write(entries) {
+// write keys in the page's main world, optionally reload
+function write(entries, reload = true) {
   chrome.scripting.executeScript({
     target: { tabId },
     world: 'MAIN',
-    args: [entries],
-    func: entries => {
+    args: [entries, reload],
+    func: (entries, reload) => {
       const orig = Storage.prototype.setItem
-      Storage.prototype.setItem = () => {} // กันเกมเขียน state เก่าทับตอน reload
+      if (reload) Storage.prototype.setItem = () => {} // กันเกมเขียน state เก่าทับตอน reload
       for (const [k, v] of Object.entries(entries)) orig.call(localStorage, k, v)
-      location.reload()
+      if (reload) location.reload()
     }
   })
-  window.close()
+  if (reload) window.close()
 }
 
-$('save').onclick = () => {
+const save = reload => {
   let v = $('raw').checked || !obj ? $('text').value : JSON.stringify(obj)
   try { v = JSON.stringify(JSON.parse(v)) } catch {}
-  write({ [$('key').value]: v })
+  write({ [$('key').value]: v }, reload)
+  data[$('key').value] = v
+  msg('Saved')
 }
+$('save').onclick = () => save(false)
+$('saveReload').onclick = () => save(true)
 
 $('export').onclick = () => {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
