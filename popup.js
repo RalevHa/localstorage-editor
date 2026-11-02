@@ -187,6 +187,8 @@ let host
 ;(async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   tabId = tab.id
+  // tab.url is undefined/empty on chrome://, new-tab, web store pages (no host permission)
+  if (!/^(https?|file):/.test(tab.url || '')) return msg('Open a regular web page (not chrome:// or a new tab).')
   host = new URL(tab.url).hostname
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
