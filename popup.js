@@ -9,10 +9,49 @@ let tabId
 let data = {}
 let obj = null // parsed value of the selected key (form mode)
 const openGroups = new Set()
-const filters = [] // [{key, value}] click ⌕ on a row to add; shows only objects matching all
+const filters = [] // [{key, value, pat, any}] shows objects matching every key; several values of one key are OR
+let facets = [] // categorical leaf fields for the picker: [{pat, parent, key, vals: Map(value -> count)}]
 
 const get = p => p.reduce((o, k) => o[k], obj)
 const set = (p, v) => { get(p.slice(0, -1))[p.at(-1)] = v }
+
+// parent path -> "heroes.*.eq" (array indices become *), so filters can target one place only
+const pat = p => p.map(k => /^\d+$/.test(k) ? '*' : k).join('.')
+const matches = (f, p) => p.at(-1) === f.key && String(get(p)) === f.value && (f.any || pat(p.slice(0, -1)) === f.pat)
+const addFilter = f => {
+  if (!filters.some(x => x.key === f.key && x.value === f.value && x.pat === f.pat)) filters.push(f)
+  render()
+}
+
+// ponytail: only fields with 2+ leaves and <=30 distinct values (star, cls, slot...) are offered; ids/names/stats stay out
+function buildFacets() {
+  const m = new Map()
+  for (const p of obj ? leaves(obj) : []) {
+    const parent = p.slice(0, -1)
+    if (Array.isArray(get(parent))) continue
+    const key = pat(parent) + '\0' + p.at(-1)
+    if (!m.has(key)) m.set(key, { pat: pat(parent), key: p.at(-1), n: 0, vals: new Map() })
+    const f = m.get(key), v = String(get(p))
+    f.n++
+    f.vals.set(v, (f.vals.get(v) || 0) + 1)
+  }
+  facets = [...m.values()].filter(f => f.n > 1 && f.vals.size <= 30).sort((a, b) => (a.pat + a.key).localeCompare(b.pat + b.key))
+  $('fk').replaceChildren(h('option', { value: '', textContent: '+ กรองตามค่า…' }),
+    ...facets.map((f, i) => h('option', { value: i, textContent: `${f.pat ? f.pat + '.' : ''}${f.key} (${f.vals.size})` })))
+  $('fv').classList.add('hide')
+}
+
+// label from the nearest ancestor object that has a name, so "heroes.9.caps" shows whose caps
+function label(path) {
+  for (let i = path.length; i >= 0; i--) {
+    const o = get(path.slice(0, i))
+    if (o && typeof o === 'object' && !Array.isArray(o)) {
+      const t = o.name ?? o.title ?? o.id
+      if (typeof t === 'string') return t.length > 40 ? t.slice(0, 40) + '…' : t
+    }
+  }
+  return ''
+}
 
 const leaves = (v, path = [], out = []) => {
   if (v !== null && typeof v === 'object') Object.keys(v).forEach(k => leaves(v[k], [...path, k], out))
@@ -79,10 +118,15 @@ function render() {
   if (!obj) return
   const q = $('q').value.toLowerCase()
   const all = leaves(obj)
-  // each filter -> object paths ("3", "heroes.7") whose key equals value; a group shows if inside a match of every filter
-  const hits = filters.map(f => new Set(all.filter(p => p.at(-1) === f.key && String(get(p)) === f.value).map(p => p.slice(0, -1).join('.'))))
-  $('chips').classList.toggle('hide', !filters.length)
-  $('chips').replaceChildren(...filters.map((f, i) => h('button', { className: 'chip', title: 'เอาออก', onclick: () => { filters.splice(i, 1); render() } }, `${f.key}: ${f.value} ✕`)))
+  // filters of one key are OR, different keys AND; each -> object paths ("3", "heroes.7") a group must sit inside
+  const byKey = Map.groupBy(filters, f => f.key)
+  const hits = [...byKey.values()].map(fs => new Set(all.filter(p => fs.some(f => matches(f, p))).map(p => p.slice(0, -1).join('.'))))
+  $('chips').replaceChildren(...filters.map((f, i) => h('span', { className: 'chip' },
+    h('button', {
+      title: 'สลับ: เฉพาะตำแหน่งนี้ / ทุกที่', textContent: `${f.any || !f.pat ? '' : f.pat + '.'}${f.key}: ${f.value}`,
+      onclick: () => { f.any = !f.any; render() }
+    }),
+    h('button', { title: 'เอาออก', textContent: '✕', onclick: () => { filters.splice(i, 1); render() } }))))
   const inside = (g, s) => [...s].some(p => p === '' || g === p || g.startsWith(p + '.'))
   const groups = new Map()
   for (const path of all) {
@@ -95,27 +139,36 @@ function render() {
   }
   for (const [name, paths] of groups) {
     const auto = !!q || hits.some(s => s.has(name)) // ponytail: auto-open on search/filter hit
-    const d = h('details', { open: auto || openGroups.has(name), ontoggle: e => { if (!auto) e.target.open ? openGroups.add(name) : openGroups.delete(name) } }, // ponytail: ignore toggles from auto-open
-      h('summary', {}, name, h('small', {}, ` (${paths.length})`)))
-    const nums = paths.filter(p => typeof get(p) === 'number')
-    if (nums.length > 1) {
-      const n = h('input', { type: 'number', step: 'any', placeholder: 'ค่า', style: 'width:80px' })
-      d.append(h('div', { className: 'row all' }, h('span', {}, `ตั้งทุกตัว (${nums.length})`), n,
-        h('button', { onclick: () => { if (n.value !== '') { nums.forEach(p => set(p, Number(n.value))); render() } } }, 'Set all')))
-    }
-    for (const p of paths) {
-      const row = h('div', { className: 'row' }, nameInput(p), field(p))
-      if (!Array.isArray(get(p.slice(0, -1)))) {
-        const f = { key: p.at(-1), value: String(get(p)) }
-        row.append(h('button', {
-          className: 'flt', title: `แสดงเฉพาะ ${f.key} = ${f.value}`, textContent: '⌕',
-          onclick: () => { if (!filters.some(x => x.key === f.key && x.value === f.value)) filters.push(f); render() }
-        }))
-      }
-      d.append(row)
-    }
     const parent = paths[0].slice(0, -1)
-    if (!Array.isArray(get(parent))) d.append(addRow(parent))
+    const lbl = label(parent)
+    const d = h('details', { open: auto || openGroups.has(name) },
+      h('summary', {}, name, lbl && h('em', {}, lbl), h('small', {}, ` (${paths.length})`)))
+    // rows are built on first open: a group like jobGen can hold 1000+ inputs
+    let built = false
+    const fill = () => {
+      if (built) return
+      built = true
+      const nums = paths.filter(p => typeof get(p) === 'number')
+      if (nums.length > 1) {
+        const n = h('input', { type: 'number', step: 'any', placeholder: 'ค่า', style: 'width:80px' })
+        d.append(h('div', { className: 'row all' }, h('span', {}, `ตั้งทุกตัว (${nums.length})`), n,
+          h('button', { onclick: () => { if (n.value !== '') { nums.forEach(p => set(p, Number(n.value))); render() } } }, 'Set all')))
+      }
+      for (const p of paths) {
+        const row = h('div', { className: 'row' }, nameInput(p), field(p))
+        if (!Array.isArray(get(p.slice(0, -1)))) {
+          const f = { key: p.at(-1), value: String(get(p)), pat: pat(p.slice(0, -1)), any: false }
+          row.append(h('button', { className: 'flt', title: `แสดงเฉพาะ ${f.key} = ${f.value}`, textContent: '⌕', onclick: () => addFilter(f) }))
+        }
+        d.append(row)
+      }
+      if (!Array.isArray(get(parent))) d.append(addRow(parent))
+    }
+    d.addEventListener('toggle', () => {
+      if (d.open) fill()
+      if (!auto) d.open ? openGroups.add(name) : openGroups.delete(name) // ponytail: ignore toggles from auto-open
+    })
+    if (d.open) fill()
     body.append(d)
   }
 }
@@ -123,6 +176,7 @@ function render() {
 function setMode(raw) {
   $('raw').checked = raw
   $('body').classList.toggle('hide', raw)
+  $('fbar').classList.toggle('hide', raw)
   $('text').classList.toggle('hide', !raw)
 }
 
@@ -135,6 +189,7 @@ function load() {
   $('text').value = form ? JSON.stringify(obj, null, 2) : s
   $('raw').disabled = !form
   setMode(!form)
+  buildFacets()
   render()
 }
 
@@ -142,6 +197,7 @@ $('raw').onchange = e => {
   if (e.target.checked) $('text').value = JSON.stringify(obj, null, 2)
   else {
     try { obj = JSON.parse($('text').value) } catch { return setMode(true) }
+    buildFacets()
     render()
   }
   setMode(e.target.checked)
@@ -152,6 +208,21 @@ $('key').onchange = () => {
   load()
 }
 $('q').oninput = render
+
+$('fk').onchange = () => {
+  const f = facets[$('fk').value]
+  $('fv').classList.toggle('hide', !f)
+  if (!f) return
+  const vals = [...f.vals].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+  $('fv').replaceChildren(h('option', { value: '', textContent: '— เลือกค่า —' }),
+    ...vals.map(([v, n]) => h('option', { value: v, textContent: `${v} (${n})` })))
+}
+$('fv').onchange = () => {
+  const f = facets[$('fk').value]
+  if (f && $('fv').value !== '') addFilter({ key: f.key, value: $('fv').value, pat: f.pat, any: false })
+  $('fk').value = ''
+  $('fv').classList.add('hide')
+}
 
 const msg = text => { $('msg').textContent = text }
 
