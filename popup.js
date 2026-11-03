@@ -10,7 +10,9 @@ let data = {}
 let obj = null // parsed value of the selected key (form mode)
 const openGroups = new Set()
 const filters = [] // [{key, value, pat, any}] shows objects matching every key; several values of one key are OR
-let facets = [] // categorical leaf fields for the picker: [{pat, parent, key, vals: Map(value -> count)}]
+let facets = new Map() // picker label -> categorical leaf field {pat, key, vals: Map(value -> count)}
+let fvals = new Map() // value picker label -> value
+const flabel = f => `${f.pat ? f.pat + '.' : ''}${f.key} (${f.vals.size})`
 
 const get = p => p.reduce((o, k) => o[k], obj)
 const set = (p, v) => { get(p.slice(0, -1))[p.at(-1)] = v }
@@ -35,9 +37,11 @@ function buildFacets() {
     f.n++
     f.vals.set(v, (f.vals.get(v) || 0) + 1)
   }
-  facets = [...m.values()].filter(f => f.n > 1 && f.vals.size <= 30).sort((a, b) => (a.pat + a.key).localeCompare(b.pat + b.key))
-  $('fk').replaceChildren(h('option', { value: '', textContent: '+ กรองตามค่า…' }),
-    ...facets.map((f, i) => h('option', { value: i, textContent: `${f.pat ? f.pat + '.' : ''}${f.key} (${f.vals.size})` })))
+  const list = [...m.values()].filter(f => f.n > 1 && f.vals.size <= 30).sort((a, b) => (a.pat + a.key).localeCompare(b.pat + b.key))
+  facets = new Map(list.map(f => [flabel(f), f]))
+  $('fkl').replaceChildren(...list.map(f => h('option', { value: flabel(f) })))
+  $('fk').value = ''
+  $('fv').value = ''
   $('fv').classList.add('hide')
 }
 
@@ -209,19 +213,24 @@ $('key').onchange = () => {
 }
 $('q').oninput = render
 
+// native <input list>: type to search, pick from the dropdown
 $('fk').onchange = () => {
-  const f = facets[$('fk').value]
+  const f = facets.get($('fk').value)
+  $('fv').value = ''
   $('fv').classList.toggle('hide', !f)
   if (!f) return
   const vals = [...f.vals].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-  $('fv').replaceChildren(h('option', { value: '', textContent: '— เลือกค่า —' }),
-    ...vals.map(([v, n]) => h('option', { value: v, textContent: `${v} (${n})` })))
+  fvals = new Map(vals.map(([v, n]) => [`${v} (${n})`, v]))
+  $('fvl').replaceChildren(...[...fvals.keys()].map(k => h('option', { value: k })))
+  $('fv').focus()
 }
 $('fv').onchange = () => {
-  const f = facets[$('fk').value]
-  if (f && $('fv').value !== '') addFilter({ key: f.key, value: $('fv').value, pat: f.pat, any: false })
+  const f = facets.get($('fk').value), v = fvals.get($('fv').value)
+  if (!f || v === undefined) return
   $('fk').value = ''
+  $('fv').value = ''
   $('fv').classList.add('hide')
+  addFilter({ key: f.key, value: v, pat: f.pat, any: false })
 }
 
 const msg = text => { $('msg').textContent = text }
