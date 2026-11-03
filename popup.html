@@ -9,7 +9,7 @@
   * { box-sizing: border-box }
   body { width: 580px; margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif }
   header { display: flex; gap: 8px; align-items: center; padding: 10px; position: sticky; top: 0; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--line) }
-  select, input[type=search], input[type=text], input[type=number], textarea {
+  select, input[type=search], input[type=text], #fbar input, input[type=number], textarea {
     background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; outline: none
   }
   select:focus, input:focus, textarea:focus { border-color: var(--accent) }
@@ -46,7 +46,9 @@
   footer button { width: 100%; padding: 10px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font: 600 14px system-ui; cursor: pointer }
   footer button:hover { filter: brightness(1.1) }
   #fbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px 0 }
-  #fbar select { padding: 3px 8px; max-width: 220px }
+  #fbar input { padding: 3px 8px }
+  #fk { width: 230px }
+  #fv { width: 110px }
   #chips { display: contents }
   .chip { display: inline-flex; border: 1px solid var(--accent); border-radius: 99px; overflow: hidden }
   .chip button { background: transparent; color: var(--accent); border: 0; font: inherit; padding: 2px 8px; cursor: pointer }
@@ -60,7 +62,7 @@
   <input id="q" type="search" placeholder="ค้นหา เช่น pace, coins">
   <label><input id="raw" type="checkbox"> JSON</label>
 </header>
-<div id="fbar"><select id="fk"></select><select id="fv" class="hide"></select><div id="chips"></div></div>
+<div id="fbar"><input id="fk" list="fkl" placeholder="+ กรองตามค่า… (พิมพ์ค้นหา)"><datalist id="fkl"></datalist><input id="fv" list="fvl" placeholder="ค่า" class="hide"><datalist id="fvl"></datalist><div id="chips"></div></div>
 <div id="body"></div>
 <textarea id="text" class="hide" spellcheck="false"></textarea>
 <footer>
