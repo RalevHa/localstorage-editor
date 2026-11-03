@@ -45,11 +45,14 @@
   #actions button { flex: 1 }
   footer button { width: 100%; padding: 10px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font: 600 14px system-ui; cursor: pointer }
   footer button:hover { filter: brightness(1.1) }
-  #chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 0 }
-  .chip, .flt { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 99px; font: inherit; cursor: pointer }
-  .chip { padding: 2px 10px }
-  .flt { flex: 0 0 auto; padding: 0 8px; border-color: var(--line); color: var(--muted) }
-  .chip:hover, .flt:hover { background: var(--accent); color: var(--accent-ink) }
+  #fbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px 0 }
+  #fbar select { padding: 3px 8px; max-width: 220px }
+  #chips { display: contents }
+  .chip { display: inline-flex; border: 1px solid var(--accent); border-radius: 99px; overflow: hidden }
+  .chip button { background: transparent; color: var(--accent); border: 0; font: inherit; padding: 2px 8px; cursor: pointer }
+  .flt { flex: 0 0 auto; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; font: inherit; cursor: pointer; padding: 0 8px }
+  .chip button:hover, .flt:hover { background: var(--accent); color: var(--accent-ink) }
+  summary em { font-style: normal; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
   .hide { display: none !important }
 </style>
 <header>
@@ -57,7 +60,7 @@
   <input id="q" type="search" placeholder="ค้นหา เช่น pace, coins">
   <label><input id="raw" type="checkbox"> JSON</label>
 </header>
-<div id="chips" class="hide"></div>
+<div id="fbar"><select id="fk"></select><select id="fv" class="hide"></select><div id="chips"></div></div>
 <div id="body"></div>
 <textarea id="text" class="hide" spellcheck="false"></textarea>
 <footer>
