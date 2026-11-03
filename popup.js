@@ -9,6 +9,7 @@ let tabId
 let data = {}
 let obj = null // parsed value of the selected key (form mode)
 const openGroups = new Set()
+const filters = [] // [{key, value}] click ⌕ on a row to add; shows only objects matching all
 
 const get = p => p.reduce((o, k) => o[k], obj)
 const set = (p, v) => { get(p.slice(0, -1))[p.at(-1)] = v }
@@ -77,15 +78,24 @@ function render() {
   body.replaceChildren()
   if (!obj) return
   const q = $('q').value.toLowerCase()
+  const all = leaves(obj)
+  // each filter -> object paths ("3", "heroes.7") whose key equals value; a group shows if inside a match of every filter
+  const hits = filters.map(f => new Set(all.filter(p => p.at(-1) === f.key && String(get(p)) === f.value).map(p => p.slice(0, -1).join('.'))))
+  $('chips').classList.toggle('hide', !filters.length)
+  $('chips').replaceChildren(...filters.map((f, i) => h('button', { className: 'chip', title: 'เอาออก', onclick: () => { filters.splice(i, 1); render() } }, `${f.key}: ${f.value} ✕`)))
+  const inside = (g, s) => [...s].some(p => p === '' || g === p || g.startsWith(p + '.'))
   const groups = new Map()
-  for (const path of leaves(obj)) {
+  for (const path of all) {
     if (q && !path.join('.').toLowerCase().includes(q) && !String(get(path)).toLowerCase().includes(q)) continue
-    const g = path.slice(0, -1).join('.') || '(root)'
-    if (!groups.has(g)) groups.set(g, [])
-    groups.get(g).push(path)
+    const g = path.slice(0, -1).join('.')
+    if (!hits.every(s => inside(g, s))) continue
+    const name = g || '(root)'
+    if (!groups.has(name)) groups.set(name, [])
+    groups.get(name).push(path)
   }
   for (const [name, paths] of groups) {
-    const d = h('details', { open: !!q || openGroups.has(name), ontoggle: e => { if (!q) e.target.open ? openGroups.add(name) : openGroups.delete(name) } }, // ponytail: ignore toggles from search auto-open
+    const auto = !!q || hits.some(s => s.has(name)) // ponytail: auto-open on search/filter hit
+    const d = h('details', { open: auto || openGroups.has(name), ontoggle: e => { if (!auto) e.target.open ? openGroups.add(name) : openGroups.delete(name) } }, // ponytail: ignore toggles from auto-open
       h('summary', {}, name, h('small', {}, ` (${paths.length})`)))
     const nums = paths.filter(p => typeof get(p) === 'number')
     if (nums.length > 1) {
@@ -93,7 +103,17 @@ function render() {
       d.append(h('div', { className: 'row all' }, h('span', {}, `ตั้งทุกตัว (${nums.length})`), n,
         h('button', { onclick: () => { if (n.value !== '') { nums.forEach(p => set(p, Number(n.value))); render() } } }, 'Set all')))
     }
-    for (const p of paths) d.append(h('div', { className: 'row' }, nameInput(p), field(p)))
+    for (const p of paths) {
+      const row = h('div', { className: 'row' }, nameInput(p), field(p))
+      if (!Array.isArray(get(p.slice(0, -1)))) {
+        const f = { key: p.at(-1), value: String(get(p)) }
+        row.append(h('button', {
+          className: 'flt', title: `แสดงเฉพาะ ${f.key} = ${f.value}`, textContent: '⌕',
+          onclick: () => { if (!filters.some(x => x.key === f.key && x.value === f.value)) filters.push(f); render() }
+        }))
+      }
+      d.append(row)
+    }
     const parent = paths[0].slice(0, -1)
     if (!Array.isArray(get(parent))) d.append(addRow(parent))
     body.append(d)
@@ -108,6 +128,7 @@ function setMode(raw) {
 
 function load() {
   const s = data[$('key').value] ?? ''
+  filters.length = 0
   try { obj = JSON.parse(s) } catch { obj = null }
   const form = obj !== null && typeof obj === 'object'
   if (!form) obj = null
