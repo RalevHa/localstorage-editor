@@ -5,6 +5,7 @@
   "description": "Edit a page's localStorage as a searchable form, with bulk set and save-proof reload.",
   "homepage_url": "https://github.com/RalevHa/localstorage-editor",
   "permissions": ["activeTab", "scripting"],
+  "optional_host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "localStorage Editor",
     "default_popup": "popup.html",
