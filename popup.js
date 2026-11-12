@@ -95,6 +95,36 @@ function nameInput(p) {
   return i
 }
 
+// undo: snapshot obj before every change (focusing a field counts, so typing is undoable per field); Undo pops the last differing one
+const undo = []
+function snap() {
+  if (!obj) return
+  const s = JSON.stringify(obj)
+  if (undo.at(-1) !== s) { undo.push(s); if (undo.length > 50) undo.shift() }
+}
+$('body').addEventListener('focusin', snap)
+$('undo').onclick = () => {
+  if ($('raw').checked) return msg('ใน JSON mode ใช้ Ctrl+Z')
+  const cur = JSON.stringify(obj)
+  let s
+  while (undo.length && (s = undo.pop()) === cur) s = undefined
+  if (s === undefined) return msg('ไม่มีอะไรให้ย้อน')
+  obj = JSON.parse(s)
+  buildFacets()
+  render()
+  msg('ย้อนแล้ว')
+}
+
+// remove the key/object at p; arrays splice so no holes. Edits obj only, Save writes it.
+function del(p) {
+  snap()
+  const parent = get(p.slice(0, -1)), k = p.at(-1)
+  if (Array.isArray(parent)) parent.splice(Number(k), 1)
+  else delete parent[k]
+  buildFacets()
+  render()
+}
+
 // add a new key to the object at parent, typed by the select
 function addRow(parent) {
   const k = h('input', { type: 'text', className: 'name', placeholder: 'ชื่อใหม่' })
@@ -109,6 +139,7 @@ function addRow(parent) {
       val = val.trim() === '' ? NaN : Number(val)
       if (Number.isNaN(val)) return msg('ไม่ใช่ตัวเลข')
     } else if (t.value === 'boolean') val = val.trim().toLowerCase() === 'true'
+    snap()
     o[name] = val
     render()
   }
@@ -146,7 +177,11 @@ function render() {
     const parent = paths[0].slice(0, -1)
     const lbl = label(parent)
     const d = h('details', { open: auto || openGroups.has(name) },
-      h('summary', {}, name, lbl && h('em', {}, lbl), h('small', {}, ` (${paths.length})`)))
+      h('summary', {}, name, lbl && h('em', {}, lbl), h('small', {}, ` (${paths.length})`),
+        ...(parent.length ? [h('button', { // root can't be deleted
+          className: 'flt', title: 'ลบ object นี้ทั้งก้อน', textContent: '🗑',
+          onclick: e => { e.preventDefault(); if (confirm(`ลบ ${name} ทั้งก้อน?`)) del(parent) }
+        })] : [])))
     // rows are built on first open: a group like jobGen can hold 1000+ inputs
     let built = false
     const fill = () => {
@@ -156,7 +191,7 @@ function render() {
       if (nums.length > 1) {
         const n = h('input', { type: 'number', step: 'any', placeholder: 'ค่า', style: 'width:80px' })
         d.append(h('div', { className: 'row all' }, h('span', {}, `ตั้งทุกตัว (${nums.length})`), n,
-          h('button', { onclick: () => { if (n.value !== '') { nums.forEach(p => set(p, Number(n.value))); render() } } }, 'Set all')))
+          h('button', { onclick: () => { if (n.value !== '') { snap(); nums.forEach(p => set(p, Number(n.value))); render() } } }, 'Set all')))
       }
       for (const p of paths) {
         const row = h('div', { className: 'row' }, nameInput(p), field(p))
@@ -165,6 +200,7 @@ function render() {
           row.append(h('button', { className: 'flt', title: `แสดงเฉพาะ ${f.key} = ${f.value}`, textContent: '⌕', onclick: () => addFilter(f) }))
         }
         if (typeof get(p) === 'number') row.append(h('button', { className: 'flt', title: 'บันทึกเป็น preset', textContent: '★', onclick: () => openPresetEditor([...p]) }))
+        row.append(h('button', { className: 'flt', title: 'ลบ', textContent: '🗑', onclick: () => del(p) }))
         d.append(row)
       }
       if (!Array.isArray(get(parent))) d.append(addRow(parent))
@@ -183,12 +219,33 @@ function setMode(raw) {
   $('body').classList.toggle('hide', raw)
   $('fbar').classList.toggle('hide', raw)
   $('pbar').classList.toggle('hide', raw)
-  $('text').classList.toggle('hide', !raw)
+  $('tw').classList.toggle('hide', !raw)
+  $('fnav').classList.toggle('hide', !raw)
+  $('q').placeholder = raw ? 'ค้นหาใน JSON (Enter = ถัดไป)' : 'ค้นหา เช่น pace, coins'
+  hilite()
 }
+
+// paint every match in #hl (needs the textarea visible to measure its width); capped so a 1-char query on a huge value stays cheap
+function hilite() {
+  const t = $('text'), hl = $('hl'), q = $('raw').checked ? $('q').value.toLowerCase() : ''
+  hl.style.width = t.clientWidth + 'px'
+  hl.style.height = t.clientHeight + 'px'
+  const s = t.value, low = s.toLowerCase(), parts = []
+  let at = 0, i
+  while (q && parts.length < 5000 && (i = low.indexOf(q, at)) >= 0) {
+    parts.push(s.slice(at, i), h('mark', {}, s.slice(i, i + q.length)))
+    at = i + q.length
+  }
+  hl.replaceChildren(...parts, s.slice(at) + '\n')
+  hl.scrollTop = t.scrollTop
+}
+$('text').onscroll = () => { $('hl').scrollTop = $('text').scrollTop }
+$('text').oninput = hilite
 
 function load() {
   const s = data[$('key').value] ?? ''
   filters.length = 0
+  undo.length = 0
   pending = null
   $('pedit').classList.add('hide')
   renderPresets()
@@ -216,7 +273,36 @@ $('key').onchange = () => {
   localStorage.setItem(`key:${host}`, $('key').value)
   load()
 }
-$('q').oninput = render
+// JSON mode: the same search box finds text in the textarea (Enter = next, Shift+Enter = prev, Ctrl+F focuses it).
+// Browser Ctrl+F doesn't work inside extension popups. Focus bounces textarea -> box so the browser scrolls to the match.
+function findText(back, fromStart) {
+  const q = $('q').value.toLowerCase(), t = $('text'), s = t.value.toLowerCase()
+  if (!q) return msg('')
+  const n = s.split(q).length - 1
+  let i = back ? s.lastIndexOf(q, t.selectionStart - 1) : s.indexOf(q, fromStart ? t.selectionStart : t.selectionEnd)
+  if (i < 0) i = back ? s.lastIndexOf(q) : s.indexOf(q) // wrap
+  if (i < 0) return msg('ไม่พบ')
+  const nth = s.slice(0, i).split(q).length // matches before i, +1
+  t.focus()
+  t.setSelectionRange(i, i + q.length)
+  $('q').focus()
+  // setSelectionRange doesn't scroll, so measure the match's y in a hidden twin (same font/width/wrap) and scroll there
+  const cs = getComputedStyle(t)
+  const m = h('div', { textContent: t.value.slice(0, i) + 'x' })
+  m.style.cssText = `position:absolute;visibility:hidden;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:break-word;width:${t.clientWidth}px;font:${cs.font};padding:${cs.padding}`
+  document.body.append(m)
+  const y = m.offsetHeight - parseFloat(cs.paddingBottom) - parseFloat(cs.lineHeight)
+  m.remove()
+  t.scrollTop = y - t.clientHeight / 2
+  msg(`${nth}/${n}`)
+}
+$('fprev').onclick = () => findText(true)
+$('fnext').onclick = () => findText(false)
+$('q').oninput = () => { if ($('raw').checked) { hilite(); findText(false, true) } else render() }
+$('q').onkeydown = e => { if (e.key === 'Enter' && $('raw').checked) findText(e.shiftKey) }
+document.onkeydown = e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); $('q').focus(); $('q').select() }
+}
 
 // native <input list>: type to search, pick from the dropdown
 $('fk').onchange = () => {
@@ -245,7 +331,7 @@ let presets = []
 let pending = null // path being turned into a preset
 const loadPresets = () => { try { presets = JSON.parse(localStorage.getItem(`presets:${host}`)) || [] } catch { presets = [] } }
 const savePresets = () => localStorage.setItem(`presets:${host}`, JSON.stringify(presets))
-const plabel = p => `${p.path.join('.')} ${p.op === 'add' ? (p.n >= 0 ? '+' : '') + p.n : '= ' + p.n}`
+const plabel = p => `${pathStr(p.path)} ${p.op === 'add' ? (p.n >= 0 ? '+' : '') + p.n : '= ' + p.n}`
 
 function renderPresets() {
   const mine = presets.filter(p => p.key === $('key').value)
@@ -255,18 +341,18 @@ function renderPresets() {
 }
 
 function applyPreset(p) {
-  try {
-    const cur = get(p.path)
-    if (typeof cur !== 'number') throw 0
-    set(p.path, p.op === 'add' ? cur + p.n : p.n)
-  } catch { return msg(`ไม่พบ ${p.path.join('.')}`) }
+  const rp = resolvePath(obj, p.path)
+  const cur = rp && get(rp)
+  if (typeof cur !== 'number') return msg(`ไม่พบ ${pathStr(p.path)}`)
+  snap()
+  set(rp, p.op === 'add' ? cur + p.n : p.n)
   render()
   msg(`${plabel(p)} → กด Save`)
 }
 
 function openPresetEditor(path) {
-  pending = path
-  $('ppath').textContent = path.join('.')
+  pending = encodePath(obj, path)
+  $('ppath').textContent = pathStr(pending)
   $('pn').value = ''
   $('pedit').classList.remove('hide')
   $('pn').focus()
@@ -306,11 +392,49 @@ function write(entries, reload = true) {
   if (reload) window.close()
 }
 
+// Diff: leaf-by-leaf, last loaded/saved value vs what's in the editor now
+const pj = s => { try { return JSON.parse(s) } catch { return s } }
+const flat = (v, p = [], m = new Map()) => {
+  if (v !== null && typeof v === 'object' && Object.keys(v).length) Object.keys(v).forEach(k => flat(v[k], [...p, k], m))
+  else m.set(p.join('.') || '(root)', JSON.stringify(v))
+  return m
+}
+$('dbtn').onclick = () => {
+  const box = $('diff')
+  if (box.classList.toggle('hide')) return
+  const a = flat(pj(data[$('key').value] ?? '')), b = flat(pj($('raw').checked || !obj ? $('text').value : JSON.stringify(obj)))
+  const lines = []
+  for (const [k, v] of a) {
+    if (!b.has(k)) lines.push(['neg', `− ${k} = ${v}`])
+    else if (b.get(k) !== v) lines.push(['', `${k}: ${v} → ${b.get(k)}`])
+  }
+  for (const [k, v] of b) if (!a.has(k)) lines.push(['pos', `+ ${k} = ${v}`])
+  const more = lines.length - 200 // ponytail: cap at 200 lines so a "set all" on 1000 fields doesn't flood the panel
+  box.replaceChildren(...(lines.length ? lines.slice(0, 200).map(([c, t]) => h('div', { className: c, textContent: t })) : [h('div', { textContent: 'ไม่มีการเปลี่ยนแปลง' })]),
+    ...(more > 0 ? [h('div', { textContent: `… อีก ${more} รายการ` })] : []))
+}
+
+// the value before each Save is kept (one per host+key) so a bad save can be pulled back with Backup, then saved again
+$('restore').onclick = () => {
+  const b = localStorage.getItem(`backup:${host}:${$('key').value}`)
+  if (b === null) return msg('ยังไม่มี backup')
+  if ($('raw').checked || !obj) { $('text').value = b; hilite() }
+  else {
+    snap()
+    obj = pj(b)
+    buildFacets()
+    render()
+  }
+  msg('โหลด backup แล้ว → กด Save')
+}
+
 const save = reload => {
+  const k = $('key').value
   let v = $('raw').checked || !obj ? $('text').value : JSON.stringify(obj)
   try { v = JSON.stringify(JSON.parse(v)) } catch {}
-  write({ [$('key').value]: v }, reload)
-  data[$('key').value] = v
+  if (k in data && data[k] !== v) try { localStorage.setItem(`backup:${host}:${k}`, data[k]) } catch {}
+  write({ [k]: v }, reload)
+  data[k] = v
   msg('Saved')
 }
 $('save').onclick = () => save(false)
