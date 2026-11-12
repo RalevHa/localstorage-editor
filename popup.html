@@ -47,6 +47,12 @@
   footer button:hover { filter: brightness(1.1) }
   #fbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px 0 }
   #fbar input { padding: 3px 8px }
+  #pbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px 0 }
+  #pbar:not(:has(.chip, #pedit:not(.hide))) { display: none }
+  #plist, #pedit { display: contents }
+  #pbar input { width: 80px; padding: 3px 8px }
+  #pbar select { padding: 3px 8px }
+  #ppath { color: var(--accent); font-weight: 600 }
   #fk { width: 230px }
   #fv { width: 110px }
   #chips { display: contents }
@@ -63,12 +69,14 @@
   <label><input id="raw" type="checkbox"> JSON</label>
 </header>
 <div id="fbar"><input id="fk" list="fkl" placeholder="+ กรองตามค่า… (พิมพ์ค้นหา)"><datalist id="fkl"></datalist><input id="fv" list="fvl" placeholder="ค่า" class="hide"><datalist id="fvl"></datalist><div id="chips"></div></div>
+<div id="pbar"><span id="plist"></span><span id="pedit" class="hide"><b id="ppath"></b><select id="pop"><option value="add">+ บวก</option><option value="set">= ตั้งเป็น</option></select><input id="pn" type="number" step="any" placeholder="ค่า"><button id="psave" class="flt">บันทึก preset</button></span></div>
 <div id="body"></div>
 <textarea id="text" class="hide" spellcheck="false"></textarea>
 <footer>
   <div id="tools">
     <button id="export" class="ghost">Export all</button>
     <button id="import" class="ghost">Import</button>
+    <button id="popen" class="ghost">Presets ↗</button>
     <span id="msg"></span>
   </div>
   <input id="file" type="file" accept=".json,application/json" class="hide">

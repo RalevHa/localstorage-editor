@@ -164,6 +164,7 @@ function render() {
           const f = { key: p.at(-1), value: String(get(p)), pat: pat(p.slice(0, -1)), any: false }
           row.append(h('button', { className: 'flt', title: `แสดงเฉพาะ ${f.key} = ${f.value}`, textContent: '⌕', onclick: () => addFilter(f) }))
         }
+        if (typeof get(p) === 'number') row.append(h('button', { className: 'flt', title: 'บันทึกเป็น preset', textContent: '★', onclick: () => openPresetEditor([...p]) }))
         d.append(row)
       }
       if (!Array.isArray(get(parent))) d.append(addRow(parent))
@@ -181,12 +182,16 @@ function setMode(raw) {
   $('raw').checked = raw
   $('body').classList.toggle('hide', raw)
   $('fbar').classList.toggle('hide', raw)
+  $('pbar').classList.toggle('hide', raw)
   $('text').classList.toggle('hide', !raw)
 }
 
 function load() {
   const s = data[$('key').value] ?? ''
   filters.length = 0
+  pending = null
+  $('pedit').classList.add('hide')
+  renderPresets()
   try { obj = JSON.parse(s) } catch { obj = null }
   const form = obj !== null && typeof obj === 'object'
   if (!form) obj = null
@@ -234,6 +239,56 @@ $('fv').onchange = () => {
 }
 
 const msg = text => { $('msg').textContent = text }
+
+// presets: one-click "stones.pf +20", saved per host in the popup's own localStorage
+let presets = []
+let pending = null // path being turned into a preset
+const loadPresets = () => { try { presets = JSON.parse(localStorage.getItem(`presets:${host}`)) || [] } catch { presets = [] } }
+const savePresets = () => localStorage.setItem(`presets:${host}`, JSON.stringify(presets))
+const plabel = p => `${p.path.join('.')} ${p.op === 'add' ? (p.n >= 0 ? '+' : '') + p.n : '= ' + p.n}`
+
+function renderPresets() {
+  const mine = presets.filter(p => p.key === $('key').value)
+  $('plist').replaceChildren(...mine.map(p => h('span', { className: 'chip' },
+    h('button', { title: 'ใช้ preset (ยังต้องกด Save)', textContent: plabel(p), onclick: () => applyPreset(p) }),
+    h('button', { title: 'ลบ', textContent: '✕', onclick: () => { presets.splice(presets.indexOf(p), 1); savePresets(); renderPresets() } }))))
+}
+
+function applyPreset(p) {
+  try {
+    const cur = get(p.path)
+    if (typeof cur !== 'number') throw 0
+    set(p.path, p.op === 'add' ? cur + p.n : p.n)
+  } catch { return msg(`ไม่พบ ${p.path.join('.')}`) }
+  render()
+  msg(`${plabel(p)} → กด Save`)
+}
+
+function openPresetEditor(path) {
+  pending = path
+  $('ppath').textContent = path.join('.')
+  $('pn').value = ''
+  $('pedit').classList.remove('hide')
+  $('pn').focus()
+}
+
+$('psave').onclick = () => {
+  const n = $('pn').value.trim() === '' ? NaN : Number($('pn').value)
+  if (!pending || Number.isNaN(n)) return msg('ไม่ใช่ตัวเลข')
+  const p = { key: $('key').value, path: pending, op: $('pop').value, n }
+  if (!presets.some(x => plabel(x) === plabel(p) && x.key === p.key)) presets.push(p)
+  savePresets()
+  pending = null
+  $('pedit').classList.add('hide')
+  renderPresets()
+}
+$('pn').onkeydown = e => { if (e.key === 'Enter') $('psave').click() }
+
+// separate tab: current values + one-click buttons. It needs host access that outlives this popup, hence the request.
+$('popen').onclick = async () => {
+  if (!(await chrome.permissions.request({ origins: [`${origin}/*`] }))) return msg('ต้องอนุญาตสิทธิ์เว็บนี้ก่อน')
+  chrome.tabs.create({ url: `presets.html?${new URLSearchParams({ tab: tabId, host, key: $('key').value })}` })
+}
 
 // write keys in the page's main world, optionally reload
 function write(entries, reload = true) {
@@ -284,13 +339,14 @@ $('file').onchange = async e => {
   }
 }
 
-let host
+let host, origin
 ;(async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   tabId = tab.id
   // tab.url is undefined/empty on chrome://, new-tab, web store pages (no host permission)
   if (!/^(https?|file):/.test(tab.url || '')) return msg('Open a regular web page (not chrome:// or a new tab).')
   host = new URL(tab.url).hostname
+  origin = new URL(tab.url).origin
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => Object.fromEntries(Object.entries(localStorage))
@@ -299,5 +355,6 @@ let host
   $('key').replaceChildren(...Object.keys(data).map(k => h('option', { textContent: k })))
   const last = localStorage.getItem(`key:${host}`)
   if (last in data) $('key').value = last
+  loadPresets()
   load()
 })()
