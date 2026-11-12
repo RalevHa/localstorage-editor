@@ -23,11 +23,11 @@ async function render() {
   let obj
   try { obj = await read() } catch { msg('อ่านหน้าเกมไม่ได้ (tab ปิด/ไม่มีสิทธิ์) — เปิดจาก popup ใหม่'); return }
   $('list').replaceChildren(...mine().map(p => {
-    let cur
-    try { cur = dig(obj, p.path) } catch {}
+    const rp = resolvePath(obj, p.path)
+    const cur = rp && dig(obj, rp)
     const ok = typeof cur === 'number'
     return h('div', { className: 'row' },
-      h('span', { className: 'path', textContent: p.path.join('.') }),
+      h('span', { className: 'path', textContent: pathStr(p.path) }),
       h('span', { className: 'val', textContent: ok ? `${cur} → ${next(cur, p)}` : 'ไม่พบ' }),
       h('button', { textContent: plabel(p), disabled: !ok, onclick: () => apply(p) }),
       h('button', { className: 'x', title: 'ลบ', textContent: '✕', onclick: () => remove(p) }))
@@ -36,9 +36,10 @@ async function render() {
 
 async function apply(p) {
   const obj = await read()
-  const cur = dig(obj, p.path)
-  if (typeof cur !== 'number') return msg('ไม่พบ ' + p.path.join('.'))
-  dig(obj, p.path.slice(0, -1))[p.path.at(-1)] = next(cur, p)
+  const rp = resolvePath(obj, p.path)
+  const cur = rp && dig(obj, rp)
+  if (typeof cur !== 'number') return msg('ไม่พบ ' + pathStr(p.path))
+  dig(obj, rp.slice(0, -1))[rp.at(-1)] = next(cur, p)
   const reload = $('rl').checked
   await inTab((k, v, reload) => {
     const orig = Storage.prototype.setItem
@@ -46,12 +47,12 @@ async function apply(p) {
     orig.call(localStorage, k, v)
     if (reload) location.reload()
   }, [key, JSON.stringify(obj), reload])
-  msg(`${p.path.join('.')} ${plabel(p)} แล้ว`)
+  msg(`${pathStr(p.path)} ${plabel(p)} แล้ว`)
   setTimeout(render, reload ? 1500 : 0)
 }
 
 function remove(p) {
-  const rest = all().filter(x => !(x.key === p.key && x.op === p.op && x.n === p.n && x.path.join('.') === p.path.join('.')))
+  const rest = all().filter(x => !(x.key === p.key && x.op === p.op && x.n === p.n && pathStr(x.path) === pathStr(p.path)))
   localStorage.setItem(`presets:${host}`, JSON.stringify(rest))
   render()
 }

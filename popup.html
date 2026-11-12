@@ -35,9 +35,17 @@
   .all input { flex: 0 0 90px !important }
   .all button, .add button { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer }
   .all button:hover, .add button:hover { background: var(--accent); color: var(--accent-ink) }
-  #text { display: block; width: calc(100% - 20px); height: 430px; margin: 10px; font: 12px/1.5 ui-monospace, Menlo, monospace; resize: none }
+  #tw { position: relative; margin: 10px; background: var(--field); border-radius: 8px }
+  #text { display: block; width: 100%; height: 430px; background: transparent; font: 12px/1.5 ui-monospace, Menlo, monospace; resize: none; position: relative }
+  /* twin behind the textarea: same font/wrap, transparent text, only the <mark> backgrounds show */
+  #hl { position: absolute; top: 1px; left: 1px; overflow: hidden; padding: 6px 10px; box-sizing: border-box; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: break-word; color: transparent; pointer-events: none }
+  #hl mark { background: rgba(250, 204, 21, .5); color: transparent; border-radius: 2px }
   footer { padding: 10px; position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line) }
-  #tools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
+  #tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px }
+  #diff { max-height: 110px; overflow: auto; margin-bottom: 8px; padding: 6px 8px; background: var(--field); border: 1px solid var(--line); border-radius: 8px; font: 11px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere }
+  #diff .pos { color: var(--accent) }
+  #diff .neg { color: #f87171 }
+  #fnav { display: flex; gap: 4px }
   #msg { color: var(--muted); font-size: 12px }
   .ghost { background: transparent !important; color: var(--text) !important; border: 1px solid var(--line) !important; width: auto !important; padding: 5px 12px !important; font: 500 12px system-ui !important }
   .ghost:hover { border-color: var(--accent) !important }
@@ -66,20 +74,26 @@
 <header>
   <select id="key"></select>
   <input id="q" type="search" placeholder="ค้นหา เช่น pace, coins">
+  <span id="fnav" class="hide"><button id="fprev" class="flt" title="ก่อนหน้า (Shift+Enter)">‹</button><button id="fnext" class="flt" title="ถัดไป (Enter)">›</button></span>
   <label><input id="raw" type="checkbox"> JSON</label>
 </header>
 <div id="fbar"><input id="fk" list="fkl" placeholder="+ กรองตามค่า… (พิมพ์ค้นหา)"><datalist id="fkl"></datalist><input id="fv" list="fvl" placeholder="ค่า" class="hide"><datalist id="fvl"></datalist><div id="chips"></div></div>
 <div id="pbar"><span id="plist"></span><span id="pedit" class="hide"><b id="ppath"></b><select id="pop"><option value="add">+ บวก</option><option value="set">= ตั้งเป็น</option></select><input id="pn" type="number" step="any" placeholder="ค่า"><button id="psave" class="flt">บันทึก preset</button></span></div>
 <div id="body"></div>
-<textarea id="text" class="hide" spellcheck="false"></textarea>
+<div id="tw" class="hide"><div id="hl"></div><textarea id="text" spellcheck="false"></textarea></div>
 <footer>
   <div id="tools">
     <button id="export" class="ghost">Export all</button>
     <button id="import" class="ghost">Import</button>
     <button id="popen" class="ghost">Presets ↗</button>
+    <button id="undo" class="ghost" title="ย้อนการเปลี่ยนแปลงล่าสุด (form mode)">↶ Undo</button>
+    <button id="dbtn" class="ghost" title="ดูว่าต่างจากค่าที่บันทึกไว้อย่างไร">Diff</button>
+    <button id="restore" class="ghost" title="โหลดค่าก่อน Save ครั้งล่าสุดกลับมา">Backup</button>
     <span id="msg"></span>
   </div>
+  <div id="diff" class="hide"></div>
   <input id="file" type="file" accept=".json,application/json" class="hide">
   <div id="actions"><button id="save">Save</button><button id="saveReload">Save &amp; reload</button></div>
 </footer>
+<script src="shared.js"></script>
 <script src="popup.js"></script>

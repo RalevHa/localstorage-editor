@@ -12,7 +12,12 @@ A small Chrome extension for editing a page's `localStorage` without hand-editin
 - **Set all** — set every numeric field in a group to one value at once.
 - **Export / Import** — back up every key of the current site to a `.json` file and restore it later.
 - **Remembers your key** — reopens on the last key you edited, per site.
-- **Raw JSON mode** — toggle to a plain text editor for anything the form can't express.
+- **Raw JSON mode** — toggle to a plain text editor for anything the form can't express. The search box finds text there too: all matches are highlighted, `Enter` / `Shift+Enter` (or ‹ ›) jump between them with an `n/total` counter, `Ctrl+F` focuses the box.
+- **Delete** — 🗑 on a row removes that key; 🗑 on a group header removes the whole object (asks first).
+- **Undo** — `↶ Undo` steps back through deletes, Set all, presets, added keys and per-field edits (form mode; use `Ctrl+Z` in the JSON editor).
+- **Diff** — shows every field that differs from the last loaded/saved value before you hit Save.
+- **Backup** — each Save keeps the previous value of that key; `Backup` loads it back into the editor (then Save to write it).
+- **Presets** — ★ on a number field saves a `+N` / `=N` one-click preset. Array elements with an `id` or `name` are remembered by that id, so presets still hit the right element after the array is reordered or an item is deleted. Elements without one fall back to their index.
 - **Edits stick** — apps that rewrite `localStorage` on unload (autosave) would otherwise overwrite your change. The extension blocks `Storage.setItem` for the reload, so your value survives.
 
 ## Install
