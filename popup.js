@@ -5,6 +5,9 @@ const h = (tag, props, ...kids) => {
   return el
 }
 
+// popup.html?tab=ID = same editor in a full tab, bound to that source tab (a popup closes when you switch tabs)
+const inTab = new URLSearchParams(location.search).has('tab')
+if (inTab) document.body.classList.add('tab')
 let tabId
 let data = {}
 let obj = null // parsed value of the selected key (form mode)
@@ -376,6 +379,13 @@ $('popen').onclick = async () => {
   chrome.tabs.create({ url: `presets.html?${new URLSearchParams({ tab: tabId, host, key: $('key').value })}` })
 }
 
+// same host-access request as Presets: the tab keeps working after the popup (and its activeTab grant) is gone
+$('topen').onclick = async () => {
+  if (!(await chrome.permissions.request({ origins: [`${origin}/*`] }))) return msg('ต้องอนุญาตสิทธิ์เว็บนี้ก่อน')
+  chrome.tabs.create({ url: `popup.html?tab=${tabId}` })
+}
+if (inTab) $('topen').classList.add('hide')
+
 // write keys in the page's main world, optionally reload
 function write(entries, reload = true) {
   chrome.scripting.executeScript({
@@ -389,7 +399,7 @@ function write(entries, reload = true) {
       if (reload) location.reload()
     }
   })
-  if (reload) window.close()
+  if (reload && !inTab) window.close()
 }
 
 // Diff: leaf-by-leaf, last loaded/saved value vs what's in the editor now
@@ -428,10 +438,32 @@ $('restore').onclick = () => {
   msg('โหลด backup แล้ว → กด Save')
 }
 
+const norm = s => { try { return JSON.stringify(JSON.parse(s)) } catch { return s } }
+const editorValue = () => norm($('raw').checked || !obj ? $('text').value : JSON.stringify(obj))
+
+// re-read the page's localStorage (it may have changed since open); asks first if the editor holds unsaved edits
+async function pull() {
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => Object.fromEntries(Object.entries(localStorage))
+  })
+  data = result
+  const keep = $('key').value
+  $('key').replaceChildren(...Object.keys(data).map(k => h('option', { textContent: k })))
+  const last = keep in data ? keep : localStorage.getItem(`key:${host}`)
+  if (last in data) $('key').value = last
+}
+$('reload').onclick = async () => {
+  const k = $('key').value
+  if (k in data && editorValue() !== norm(data[k]) && !confirm('มีการแก้ที่ยังไม่ Save — โหลดใหม่จะทิ้งการแก้เหล่านั้น')) return
+  try { await pull() } catch { return msg('อ่านหน้าเว็บไม่ได้ (tab ปิด/ไม่มีสิทธิ์)') }
+  load()
+  msg('โหลดค่าล่าสุดแล้ว')
+}
+
 const save = reload => {
   const k = $('key').value
-  let v = $('raw').checked || !obj ? $('text').value : JSON.stringify(obj)
-  try { v = JSON.stringify(JSON.parse(v)) } catch {}
+  const v = editorValue()
   if (k in data && data[k] !== v) try { localStorage.setItem(`backup:${host}:${k}`, data[k]) } catch {}
   write({ [k]: v }, reload)
   data[k] = v
@@ -465,20 +497,16 @@ $('file').onchange = async e => {
 
 let host, origin
 ;(async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  let tab
+  if (inTab) {
+    try { tab = await chrome.tabs.get(Number(new URLSearchParams(location.search).get('tab'))) } catch { return msg('แท็บต้นทางปิดไปแล้ว — เปิดใหม่จาก popup') }
+  } else [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   tabId = tab.id
   // tab.url is undefined/empty on chrome://, new-tab, web store pages (no host permission)
   if (!/^(https?|file):/.test(tab.url || '')) return msg('Open a regular web page (not chrome:// or a new tab).')
   host = new URL(tab.url).hostname
   origin = new URL(tab.url).origin
-  const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => Object.fromEntries(Object.entries(localStorage))
-  })
-  data = result
-  $('key').replaceChildren(...Object.keys(data).map(k => h('option', { textContent: k })))
-  const last = localStorage.getItem(`key:${host}`)
-  if (last in data) $('key').value = last
+  await pull()
   loadPresets()
   load()
 })()

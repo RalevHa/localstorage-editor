@@ -70,6 +70,10 @@
   .chip button:hover, .flt:hover { background: var(--accent); color: var(--accent-ink) }
   summary em { font-style: normal; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
   .hide { display: none !important }
+  /* editor opened as a full tab (popup.html?tab=ID): page scrolls, header/footer stay sticky */
+  body.tab { width: auto; max-width: 960px; margin: 0 auto }
+  .tab #body { max-height: none }
+  .tab #text { height: calc(100vh - 230px) }
 </style>
 <header>
   <select id="key"></select>
@@ -86,6 +90,8 @@
     <button id="export" class="ghost">Export all</button>
     <button id="import" class="ghost">Import</button>
     <button id="popen" class="ghost">Presets ↗</button>
+    <button id="topen" class="ghost" title="เปิดเป็นแท็บ: สลับไปดูหน้าอื่นได้โดยไม่เสีย search/ค่าที่แก้">Edit in tab ↗</button>
+    <button id="reload" class="ghost" title="อ่านค่าล่าสุดจากหน้าเว็บมาแทนที่ในตัวแก้ไข">↻ โหลดใหม่</button>
     <button id="undo" class="ghost" title="ย้อนการเปลี่ยนแปลงล่าสุด (form mode)">↶ Undo</button>
     <button id="dbtn" class="ghost" title="ดูว่าต่างจากค่าที่บันทึกไว้อย่างไร">Diff</button>
     <button id="restore" class="ghost" title="โหลดค่าก่อน Save ครั้งล่าสุดกลับมา">Backup</button>
