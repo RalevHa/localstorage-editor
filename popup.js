@@ -11,6 +11,7 @@ if (inTab) document.body.classList.add('tab')
 let tabId
 let data = {}
 let obj = null // parsed value of the selected key (form mode)
+const wrapped = new Set() // paths of JSON-in-a-string fields, expanded in obj (see shared.js)
 const openGroups = new Set()
 const filters = [] // [{key, value, pat, any}] shows objects matching every key; several values of one key are OR
 let facets = new Map() // picker label -> categorical leaf field {pat, key, vals: Map(value -> count)}
@@ -71,6 +72,8 @@ function rename(p, name) {
   const parent = get(p.slice(0, -1))
   if (!name || name in parent) return false
   const old = p.at(-1)
+  const pre = pkey(p).slice(0, -1), np = pkey([...p.slice(0, -1), name]).slice(0, -1)
+  for (const w of [...wrapped]) if (w === pre + ']' || w.startsWith(pre + ',')) { wrapped.delete(w); wrapped.add(np + w.slice(pre.length)) }
   const entries = Object.entries(parent).map(([k, v]) => [k === old ? name : k, v])
   Object.keys(parent).forEach(k => delete parent[k])
   Object.assign(parent, Object.fromEntries(entries))
@@ -255,6 +258,9 @@ function load() {
   try { obj = JSON.parse(s) } catch { obj = null }
   const form = obj !== null && typeof obj === 'object'
   if (!form) obj = null
+  wrapped.clear()
+  if (form) unwrap(obj, wrapped)
+  if (wrapped.size) msg(`แกะ JSON ซ้อนใน: ${[...wrapped].map(w => JSON.parse(w).join('.')).join(', ')}`)
   $('text').value = form ? JSON.stringify(obj, null, 2) : s
   $('raw').disabled = !form
   setMode(!form)
@@ -404,6 +410,7 @@ function write(entries, reload = true) {
 
 // Diff: leaf-by-leaf, last loaded/saved value vs what's in the editor now
 const pj = s => { try { return JSON.parse(s) } catch { return s } }
+const expand = s => { const o = pj(s); unwrap(o, new Set()); return o } // diff compares expanded values on both sides
 const flat = (v, p = [], m = new Map()) => {
   if (v !== null && typeof v === 'object' && Object.keys(v).length) Object.keys(v).forEach(k => flat(v[k], [...p, k], m))
   else m.set(p.join('.') || '(root)', JSON.stringify(v))
@@ -412,7 +419,7 @@ const flat = (v, p = [], m = new Map()) => {
 $('dbtn').onclick = () => {
   const box = $('diff')
   if (box.classList.toggle('hide')) return
-  const a = flat(pj(data[$('key').value] ?? '')), b = flat(pj($('raw').checked || !obj ? $('text').value : JSON.stringify(obj)))
+  const a = flat(expand(data[$('key').value] ?? '')), b = flat(pj($('raw').checked || !obj ? $('text').value : JSON.stringify(obj)))
   const lines = []
   for (const [k, v] of a) {
     if (!b.has(k)) lines.push(['neg', `− ${k} = ${v}`])
@@ -428,10 +435,13 @@ $('dbtn').onclick = () => {
 $('restore').onclick = () => {
   const b = localStorage.getItem(`backup:${host}:${$('key').value}`)
   if (b === null) return msg('ยังไม่มี backup')
-  if ($('raw').checked || !obj) { $('text').value = b; hilite() }
+  const o = pj(b)
+  wrapped.clear()
+  unwrap(o, wrapped)
+  if ($('raw').checked || !obj) { $('text').value = o !== null && typeof o === 'object' ? JSON.stringify(o, null, 2) : b; hilite() }
   else {
     snap()
-    obj = pj(b)
+    obj = o
     buildFacets()
     render()
   }
@@ -439,7 +449,10 @@ $('restore').onclick = () => {
 }
 
 const norm = s => { try { return JSON.stringify(JSON.parse(s)) } catch { return s } }
-const editorValue = () => norm($('raw').checked || !obj ? $('text').value : JSON.stringify(obj))
+const editorValue = () => {
+  const s = $('raw').checked || !obj ? $('text').value : JSON.stringify(obj)
+  try { return JSON.stringify(ser(JSON.parse(s), wrapped)) } catch { return s }
+}
 
 // re-read the page's localStorage (it may have changed since open); asks first if the editor holds unsaved edits
 async function pull() {

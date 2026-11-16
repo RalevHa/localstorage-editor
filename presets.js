@@ -17,7 +17,13 @@ const next = (cur, p) => (p.op === 'add' ? cur + p.n : p.n)
 const dig = (o, path) => path.reduce((x, k) => x[k], o)
 
 const inTab = (func, args) => chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func, args }).then(r => r[0].result)
-const read = async () => JSON.parse(await inTab(k => localStorage.getItem(k), [key]))
+const wrapped = new Set()
+const read = async () => {
+  const o = JSON.parse(await inTab(k => localStorage.getItem(k), [key]))
+  wrapped.clear()
+  unwrap(o, wrapped)
+  return o
+}
 
 async function render() {
   let obj
@@ -46,7 +52,7 @@ async function apply(p) {
     if (reload) Storage.prototype.setItem = () => {} // กันเกมเขียน state เก่าทับตอน reload
     orig.call(localStorage, k, v)
     if (reload) location.reload()
-  }, [key, JSON.stringify(obj), reload])
+  }, [key, JSON.stringify(ser(obj, wrapped)), reload])
   msg(`${pathStr(p.path)} ${plabel(p)} แล้ว`)
   setTimeout(render, reload ? 1500 : 0)
 }
