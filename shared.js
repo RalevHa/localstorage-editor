@@ -29,3 +29,25 @@ function resolvePath(obj, path) {
   }
   return out
 }
+
+// Saves like {"d":"{...json...}","h":"hash"} keep JSON inside a JSON string. unwrap expands such strings in place and records
+// their paths in `set`; ser turns them back into strings. Only strings that re-stringify identically are expanded, so untouched data round-trips byte for byte.
+const pkey = p => JSON.stringify(p)
+function unwrap(o, set, p = []) {
+  if (o === null || typeof o !== 'object') return
+  for (const k of Object.keys(o)) {
+    const v = o[k]
+    if (typeof v === 'string' && /^\s*[[{]/.test(v)) {
+      try {
+        const x = JSON.parse(v)
+        if (x && typeof x === 'object' && JSON.stringify(x) === v) { o[k] = x; set.add(pkey([...p, k])) }
+      } catch {}
+    }
+    unwrap(o[k], set, [...p, k])
+  }
+}
+function ser(v, set, p = []) {
+  if (v === null || typeof v !== 'object') return v
+  const c = Array.isArray(v) ? v.map((x, i) => ser(x, set, [...p, String(i)])) : Object.fromEntries(Object.keys(v).map(k => [k, ser(v[k], set, [...p, k])]))
+  return set.has(pkey(p)) ? JSON.stringify(c) : c
+}
